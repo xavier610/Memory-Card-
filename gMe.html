@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memory Card Game - Leaderboard Online</title>
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, #8EC5FC 0%, #E0C3FC 100%);
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: #333;
+    }
+
+    h1 {
+      color: #333;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 10px;
+    }
+
+    .game-board {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 10px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+
+    .card {
+      width: 60px;
+      height: 60px;
+      perspective: 800px;
+      cursor: pointer;
+    }
+
+    .card-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      transition: transform 0.6s;
+    }
+
+    .card.flipped .card-inner {
+      transform: rotateY(180deg);
+    }
+
+    .card-front, .card-back {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    .card-front {
+      background: linear-gradient(135deg, #74ABE2, #5563DE);
+      border: 2px solid #fff;
+    }
+
+    .card-back {
+      background: linear-gradient(135deg, #FFD3A5, #FD6585);
+      transform: rotateY(180deg);
+      color: #fff;
+    }
+
+    .card:hover .card-front {
+      filter: brightness(1.1);
+    }
+
+    button {
+      margin-top: 15px;
+      padding: 10px 25px;
+      font-size: 16px;
+      background: linear-gradient(135deg, #43e97b, #38f9d7);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.3s;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+
+    button:hover {
+      transform: scale(1.05);
+    }
+
+    #leaderboard {
+      margin-top: 25px;
+      background: #fff;
+      border-radius: 10px;
+      padding: 15px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      width: 300px;
+    }
+
+    #leaderboard h2 {
+      margin: 0 0 10px;
+      text-align: center;
+    }
+
+    #leaderboard ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    #leaderboard li {
+      padding: 6px 0;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    @media (max-width: 700px) {
+      .game-board {
+        grid-template-columns: repeat(5, 1fr);
+      }
+      .card {
+        width: 50px;
+        height: 50px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>🐾 Memory Card Game 🐾</h1>
+  <input id="playerName" placeholder="Masukkan Nama Kamu" style="padding:8px;border-radius:6px;border:1px solid #aaa;">
+  <button id="reset-button">🔄 Mulai Game</button>
+  <div class="game-board"></div>
+
+  <div id="leaderboard">
+    <h2>🏆 Leaderboard</h2>
+    <ul id="leaderboard-list"></ul>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js"></script>
+
+  <script>
+    // 🔥 Konfigurasi Firebase - GANTI DENGAN PUNYA KAMU 🔥
+    const firebaseConfig = {
+      apiKey: "ISI_APIKEY_MU",
+      authDomain: "ISI_PROJECTID.firebaseapp.com",
+      databaseURL: "https://ISI_PROJECTID-default-rtdb.firebaseio.com/",
+      projectId: "ISI_PROJECTID",
+      storageBucket: "ISI_PROJECTID.appspot.com",
+      messagingSenderId: "ISI_MESSAGINGID",
+      appId: "ISI_APPID"
+    };
+
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const uniqueIcons = [
+      '🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯',
+      '🦁','🐮','🐷','🐸','🐵','🐔','🐧','🐦','🐤','🐺',
+      '🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🕷️',
+      '🦂','🐢','🐍','🦎','🦖','🐙','🦑','🐠','🐡','🐬',
+      '🐳','🐋','🦈','🐊','🐆','🐅','🐃','🐂','🐄','🐪'
+    ];
+
+    const cards = [...uniqueIcons, ...uniqueIcons];
+    let firstCard = null;
+    let secondCard = null;
+    let lockBoard = false;
+    let matchedCount = 0;
+    let startTime;
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    function createBoard() {
+      matchedCount = 0;
+      startTime = Date.now();
+      const gameBoard = document.querySelector('.game-board');
+      gameBoard.innerHTML = '';
+      shuffle(cards);
+      cards.forEach(card => {
+        const el = document.createElement('div');
+        el.classList.add('card');
+        el.dataset.icon = card;
+        el.innerHTML = `
+          <div class="card-inner">
+            <div class="card-front"></div>
+            <div class="card-back">${card}</div>
+          </div>`;
+        el.addEventListener('click', flipCard);
+        gameBoard.appendChild(el);
+      });
+    }
+
+    function flipCard() {
+      if (lockBoard) return;
+      if (this === firstCard) return;
+
+      this.classList.add('flipped');
+      if (!firstCard) {
+        firstCard = this;
+        return;
+      }
+
+      secondCard = this;
+      checkForMatch();
+    }
+
+    function checkForMatch() {
+      let isMatch = firstCard.dataset.icon === secondCard.dataset.icon;
+      isMatch ? disableCards() : unflipCards();
+    }
+
+    function disableCards() {
+      firstCard.removeEventListener('click', flipCard);
+      secondCard.removeEventListener('click', flipCard);
+      matchedCount += 2;
+      resetBoard();
+      if (matchedCount === cards.length) {
+        const timeTaken = Math.floor((Date.now() - startTime) / 1000);
+        const name = document.getElementById("playerName").value || "Pemain Tanpa Nama";
+        saveScore(name, timeTaken);
+      }
+    }
+
+    function unflipCards() {
+      lockBoard = true;
+      setTimeout(() => {
+        firstCard.classList.remove('flipped');
+        secondCard.classList.remove('flipped');
+        resetBoard();
+      }, 1000);
+    }
+
+    function resetBoard() {
+      [firstCard, secondCard, lockBoard] = [null, null, false];
+    }
+
+    // Simpan skor ke Firebase
+    function saveScore(name, time) {
+      const ref = db.ref("leaderboard").push();
+      ref.set({ name, time });
+      alert(`🎉 Selamat ${name}! Kamu menyelesaikan game dalam ${time} detik.`);
+      loadLeaderboard();
+    }
+
+    // Tampilkan leaderboard
+    function loadLeaderboard() {
+      const list = document.getElementById("leaderboard-list");
+      db.ref("leaderboard").orderByChild("time").limitToFirst(10).on("value", snapshot => {
+        list.innerHTML = '';
+        snapshot.forEach(data => {
+          const { name, time } = data.val();
+          const li = document.createElement("li");
+          li.innerHTML = `<span>${name}</span><span>${time}s</span>`;
+          list.appendChild(li);
+        });
+      });
+    }
+
+    document.getElementById('reset-button').addEventListener('click', createBoard);
+
+    // Jalankan
+    createBoard();
+    loadLeaderboard();
+  </script>
+</body>
+</html>
